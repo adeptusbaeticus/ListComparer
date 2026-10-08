@@ -1,0 +1,154 @@
+2000 objetivo (2) (2,000 Points)
+
+Astra Militarum
+Designation Force and Hammer of the Emperor (3 Detachment Points)
+Reconnaissance
+Strike Force (2,000 Points)
+
+CHARACTERS
+
+Rogal Dorn Commander (310 Points)
+  • Warlord
+  • 1x Armoured tracks
+  • 1x Coaxial autocannon
+  • 1x Heavy stubber
+  • 2x Meltagun
+  • 2x Multi-melta
+  • 1x Oppressor cannon
+  • 1x Pulveriser cannon
+  • Enhancements: Veteran Crew
+
+Rogal Dorn Commander (320 Points)
+  • 1x Armoured tracks
+  • 1x Coaxial autocannon
+  • 1x Heavy stubber
+  • 2x Meltagun
+  • 2x Multi-melta
+  • 1x Oppressor cannon
+  • 1x Pulveriser cannon
+  • Enhancements: Indomitable Steed
+
+Tech-Priest Enginseer (45 Points)
+  • 1x Enginseer Axe
+  • 1x Mechanicus pistol
+  • 1x Servo-arm
+
+BATTLELINE
+
+Catachan Jungle Fighters (70 Points)
+  • 1x Jungle Fighter Sergeant
+     ◦ 1x Close combat weapon
+     ◦ 1x Laspistol
+  • 9x Jungle Fighter
+     ◦ 9x Close combat weapon
+     ◦ 2x Flamer
+     ◦ 7x Lasgun
+     ◦ 1x Vox-caster
+
+Catachan Jungle Fighters (70 Points)
+  • 1x Jungle Fighter Sergeant
+     ◦ 1x Close combat weapon
+     ◦ 1x Laspistol
+  • 9x Jungle Fighter
+     ◦ 9x Close combat weapon
+     ◦ 2x Flamer
+     ◦ 7x Lasgun
+     ◦ 1x Vox-caster
+
+DEDICATED TRANSPORTS
+
+Chimera (75 Points)
+  • 1x Armoured tracks
+  • 1x Heavy flamer
+  • 1x Heavy flamer
+  • 1x Heavy stubber
+  • 1x Hunter-killer missile
+  • 1x Lasgun array
+
+Chimera (75 Points)
+  • 1x Armoured tracks
+  • 1x Heavy flamer
+  • 1x Heavy flamer
+  • 1x Heavy stubber
+  • 1x Hunter-killer missile
+  • 1x Lasgun array
+
+OTHER DATASHEETS
+
+Bullgryn Squad (90 Points)
+  • 1x Bullgryn Bone 'ead
+     ◦ 1x Brute shield
+     ◦ 1x Bullgryn maul
+     ◦ 1x Close combat weapon
+  • 2x Bullgryn
+     ◦ 2x Brute shield
+     ◦ 2x Bullgryn maul
+     ◦ 2x Close combat weapon
+
+Hellhound (115 Points)
+  • 1x Armoured tracks
+  • 1x Chem cannon
+  • 1x Hunter-killer missile
+  • 1x Multi-melta
+
+Hippogriff AFV (70 Points)
+  • 1x Armoured hull
+  • 1x Melta cannon
+  • 1x Meltagun
+
+Hippogriff AFV (70 Points)
+  • 1x Armoured hull
+  • 1x Melta cannon
+  • 1x Meltagun
+
+Kasrkin (105 Points)
+  • 1x Kasrkin Sergeant
+     ◦ 1x Plasma pistol
+     ◦ 1x Power weapon
+  • 9x Kasrkin Trooper
+     ◦ 9x Close combat weapon
+     ◦ 3x Hot-shot lasgun
+     ◦ 1x Hot-shot laspistol
+     ◦ 1x Hot-shot marksman rifle
+     ◦ 1x Melta mine
+     ◦ 2x Meltagun
+     ◦ 2x Plasma gun
+     ◦ 1x Vox-caster
+
+Kasrkin (105 Points)
+  • 1x Kasrkin Sergeant
+     ◦ 1x Plasma pistol
+     ◦ 1x Power weapon
+  • 9x Kasrkin Trooper
+     ◦ 9x Close combat weapon
+     ◦ 3x Hot-shot lasgun
+     ◦ 1x Hot-shot laspistol
+     ◦ 1x Hot-shot marksman rifle
+     ◦ 1x Melta mine
+     ◦ 2x Meltagun
+     ◦ 2x Plasma gun
+     ◦ 1x Vox-caster
+
+Leman Russ Battle Tank (175 Points)
+  • 1x Armoured tracks
+  • 1x Heavy stubber
+  • 1x Hunter-killer missile
+  • 1x Lascannon
+  • 1x Leman Russ battle cannon
+  • 2x Multi-melta
+
+Leman Russ Exterminator (160 Points)
+  • 1x Armoured tracks
+  • 1x Exterminator autocannon
+  • 1x Heavy bolter
+  • 2x Heavy bolter
+  • 1x Heavy stubber
+  • 1x Hunter-killer missile
+
+Leman Russ Vanquisher (145 Points)
+  • 1x Armoured tracks
+  • 1x Heavy stubber
+  • 1x Hunter-killer missile
+  • 1x Lascannon
+  • 2x Multi-melta
+  • 1x Vanquisher battle cannon
