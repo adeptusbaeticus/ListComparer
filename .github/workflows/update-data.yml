@@ -1,0 +1,74 @@
+# Place this file in the repo at:  .github/workflows/update-data.yml
+# Checks BSData/wh40k-11e once a day. If there is a new commit, it rebuilds the dataset,
+# runs the safety checks, and only then publishes it. If a check fails, the old data stays live
+# and an issue is opened so you get a notification.
+#
+# NOT YET TESTED: it could not be run where it was written. Run it once by hand
+# (Actions tab > "Update BSData dataset" > Run workflow) and look at the log.
+
+name: Update BSData dataset
+
+on:
+  schedule:
+    - cron: "17 5 * * *" # every day at 05:17 UTC
+  workflow_dispatch: # lets you run it by hand
+
+permissions:
+  contents: write # to commit the new dataset
+  issues: write # to open an issue if something fails
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Compare with the last BSData commit we used
+        id: upstream
+        run: |
+          SHA=$(git ls-remote https://github.com/BSData/wh40k-11e.git refs/heads/main | cut -f1)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          CURRENT=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('data/source.json','utf8')).sha)}catch{console.log('')}")
+          if [ -n "$SHA" ] && [ "$SHA" != "$CURRENT" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "latest=$SHA current=$CURRENT"
+
+      - name: Download BSData and build the dataset
+        if: steps.upstream.outputs.changed == 'true'
+        run: |
+          git clone --depth 1 https://github.com/BSData/wh40k-11e.git bsdata
+          node converter/buildDataset.js bsdata /tmp/new-dataset.json
+
+      - name: Safety checks
+        if: steps.upstream.outputs.changed == 'true'
+        run: node converter/checks.js /tmp/new-dataset.json public/data/dataset.json
+
+      - name: Publish the new dataset
+        if: steps.upstream.outputs.changed == 'true'
+        env:
+          SHA: ${{ steps.upstream.outputs.sha }}
+        run: |
+          mkdir -p public/data data
+          cp /tmp/new-dataset.json public/data/dataset.json
+          echo "{\"sha\":\"$SHA\",\"updated\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > data/source.json
+          git config user.name "dataset-bot"
+          git config user.email "dataset-bot@users.noreply.github.com"
+          git add public/data/dataset.json data/source.json
+          git commit -m "Update BSData dataset to ${SHA:0:7}"
+          git push
+
+      - name: Open an issue if the update failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "Daily data update failed" \
+            --body "The BSData update or its safety checks failed, so the previous data is still live. See the run log: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
