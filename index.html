@@ -92,11 +92,17 @@ function resumen(titulo, intro, ninguna, arr, frase) {
   return `<div><h3>${titulo}</h3><p class="mut">${intro}</p>${arr.length ? `<ul>${li}</ul>` : `<p>${ninguna}</p>`}</div>`;
 }
 
+function habilidades(u) {
+  const hechas = u.habilidades.map((x) => `${esc(x.name)} <small>(${esc(x.efecto)})</small>`).join(", ") || "ninguna";
+  const resto = u.habilidadesSinAplicar ? ` <small>· ${u.habilidadesSinAplicar} habilidad${u.habilidadesSinAplicar > 1 ? "es" : ""} más no se tiene${u.habilidadesSinAplicar > 1 ? "n" : ""} en cuenta</small>` : "";
+  return `<p><b>Habilidades tenidas en cuenta:</b> ${hechas}${resto}</p>`;
+}
+
 function unidades(titulo, units) {
   const filas = units.map((u) => `<details><summary><b>${nombre(u)}</b> <small>${u.points} pts</small>
     <div class="barra"><i class="b" style="width:${u.pct.good}%"></i><i class="r" style="width:${u.pct.regular}%"></i><i class="m" style="width:${u.pct.bad}%"></i></div>
     <small>Bueno ${u.pct.good} % · Regular ${u.pct.regular} % · Malo ${u.pct.bad} %</small></summary>
-    <p><b>Buen matchup contra:</b> ${lista(u.good)}</p><p><b>Matchup regular contra:</b> ${lista(u.regular)}</p><p><b>Mal matchup contra:</b> ${lista(u.bad)}</p></details>`).join("");
+    <p><b>Buen matchup contra:</b> ${lista(u.good)}</p><p><b>Matchup regular contra:</b> ${lista(u.regular)}</p><p><b>Mal matchup contra:</b> ${lista(u.bad)}</p>${habilidades(u)}</details>`).join("");
   return `<section class="card"><h2>${titulo}</h2><p class="ayuda">Los porcentajes son la parte de los puntos rivales contra la que cada unidad tiene buen, regular o mal matchup. Pulsa una unidad para ver el detalle.</p>${filas}</section>`;
 }
 
@@ -123,7 +129,7 @@ fetch("./public/data/dataset.json").then((r) => { if (!r.ok) throw 0; return r.j
 });
 fetch("./data/source.json").then((r) => r.json()).then((s) => {
   const f = new Date(s.updated).toLocaleDateString("es-ES");
-  $("pie").innerHTML += ` Datos actualizados el ${f} (versión ${esc(String(s.sha).slice(0, 7))}). Estimación general de una ronda con tiradas medias: no tiene en cuenta habilidades, terreno ni estratagemas.`;
+  $("pie").innerHTML += ` Datos actualizados el ${f} (versión ${esc(String(s.sha).slice(0, 7))}). Estimación general de una ronda con tiradas medias: solo tiene en cuenta algunas habilidades de unidad; no incluye terreno, líderes, auras ni estratagemas.`;
 }).catch(() => {});
 </script>
 </body>
