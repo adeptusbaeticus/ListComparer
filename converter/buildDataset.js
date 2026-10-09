@@ -40,32 +40,42 @@ function buildIndex(cats) {
 const chars = (p) => Object.fromEntries((p.characteristics || []).map((c) => [c.name, c.$text ?? ""]));
 
 // Follow every nested entry and every link under one unit, collecting profiles and keywords.
+// Abilities found under optional upgrades (wargear options, enhancements) are not the unit's own, so they are left out.
 function collectUnit(root, idx) {
   const seen = new Set();
   const profiles = [];
+  const abilities = new Map();
   const keywords = new Set();
   const warnings = new Set();
 
-  const visit = (e) => {
+  const take = (p, optional) => {
+    profiles.push(p);
+    if (!optional && p.typeName === "Abilities" && !abilities.has(p.name)) {
+      abilities.set(p.name, { name: p.name, text: chars(p).Description ?? "" });
+    }
+  };
+
+  const visit = (e, optional = false) => {
     if (!e || seen.has(e)) return;
     seen.add(e);
-    for (const p of e.profiles || []) profiles.push(p);
+    const opt = optional || e.type === "upgrade";
+    for (const p of e.profiles || []) take(p, opt);
     for (const l of e.infoLinks || []) {
       if (l.type === "profile") {
         const t = idx.get(l.targetId);
-        if (t) profiles.push(t); else warnings.add(`unresolved profile link: ${l.name}`);
+        if (t) take(t, opt); else warnings.add(`unresolved profile link: ${l.name}`);
       }
     }
     for (const cl of e.categoryLinks || []) keywords.add(cl.name);
-    for (const k of ["selectionEntries", "selectionEntryGroups"]) for (const s of e[k] || []) visit(s);
+    for (const k of ["selectionEntries", "selectionEntryGroups"]) for (const s of e[k] || []) visit(s, opt);
     for (const l of e.entryLinks || []) {
       if (SKIP_LINK_NAMES.has(norm(l.name))) continue;
       const t = idx.get(l.targetId);
-      if (t) visit(t); else warnings.add(`unresolved link: ${l.name}`);
+      if (t) visit(t, opt); else warnings.add(`unresolved link: ${l.name}`);
     }
   };
   visit(root);
-  return { profiles, keywords, warnings };
+  return { profiles, keywords, warnings, abilities: [...abilities.values()] };
 }
 
 // "➤ Plasma gun - supercharge" -> { base: "Plasma gun", mode: "supercharge" }
@@ -106,7 +116,7 @@ export function buildDataset(dir) {
     for (const e of c.selectionEntries || []) if (e.type === "unit" || e.type === "model") roots.push(e);
 
     for (const root of roots) {
-      const { profiles, keywords, warnings } = collectUnit(root, idx);
+      const { profiles, keywords, warnings, abilities } = collectUnit(root, idx);
 
       const models = [];
       const seenModels = new Set();
@@ -134,6 +144,7 @@ export function buildDataset(dir) {
         faction: c.name,
         points: ptsCost && ptsCost.value > 0 ? ptsCost.value : null, // null = depends on squad size
         keywords: [...keywords].sort(),
+        abilities,
         models,
         weapons,
       });

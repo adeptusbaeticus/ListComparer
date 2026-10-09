@@ -4,9 +4,12 @@
 //
 // Everything is an average-dice estimate of ONE round, with basic rules only:
 // hit, wound, save (with AP and invulnerable), damage capped by model wounds, plus a few weapon keywords
-// (Torrent, Twin-linked, Anti-X, Lethal Hits, Sustained Hits, Devastating Wounds).
-// Ignored for now: range, movement, terrain, stratagems, unit abilities, Blast/Rapid Fire/Melta/Heavy,
-// and One Shot weapons (they are excluded from per-round damage).
+// (Torrent, Twin-linked, Anti-X, Lethal Hits, Sustained Hits, Devastating Wounds) and the self-contained unit
+// abilities that effects.js can read safely (Feel No Pain, damage reduction, -1 to be hit, re-rolls / +1 against
+// certain targets). Ignored for now: range, movement, terrain, stratagems, leaders and auras, conditional
+// abilities, Blast/Rapid Fire/Melta/Heavy, and One Shot weapons (excluded from per-round damage).
+
+import { extractEffects } from "./effects.js";
 
 export const DEFAULT_CONFIG = {
   meleeWeight: 0.5,       // melee damage counts this much compared with shooting (needs charging, etc.)
@@ -47,7 +50,7 @@ export function parseDice(expr) {
   return [...dist].map(([v, p]) => ({ v: v + c, p }));
 }
 const mean = (d) => d.reduce((a, o) => a + o.v * o.p, 0);
-const meanCapped = (d, cap) => d.reduce((a, o) => a + Math.min(o.v, cap) * o.p, 0);
+const meanCapped = (d, cap, reduce = 0) => d.reduce((a, o) => a + Math.min(Math.max(o.v - reduce, 1), cap) * o.p, 0); // damage never drops below 1
 
 function parseKeywords(str) {
   const k = { torrent: false, twin: false, lethal: false, dev: false, oneShot: false, sustained: 0, anti: [] };
@@ -70,8 +73,9 @@ function parseKeywords(str) {
 // ---------- one weapon profile against one defender ----------
 
 // v: {type, attacks, skill, strength, ap, damage, keywords}; count: how many of this weapon the unit has
-// def: {T, save, invuln, W (wounds per model), keywords: Set of lower-case keywords}
-export function weaponDamage(v, count, def) {
+// def: {T, save, invuln, W (wounds per model), keywords: Set, fnp?, dmgReduce?, hitPenalty?}
+// mods: {weapon: weapon name, offense: effects of the attacking unit (see effects.js)}
+export function weaponDamage(v, count, def, mods = {}) {
   const kw = parseKeywords(v.keywords);
   if (kw.oneShot) return { dmg: 0, skipped: "one shot" };
   const A = parseDice(v.attacks), D = parseDice(v.damage);
@@ -79,8 +83,21 @@ export function weaponDamage(v, count, def) {
   const skill = parseInt(v.skill, 10);
   if (!A || !D || Number.isNaN(S) || (!kw.torrent && Number.isNaN(skill))) return { dmg: 0, skipped: "unreadable profile" };
 
+  const wname = String(mods.weapon || "").toLowerCase();
+  const fx = (mods.offense || []).filter((e) =>
+    (!e.type || e.type === v.type) &&
+    (!e.weapon || wname.includes(e.weapon) || e.weapon.includes(wname)) &&
+    (!e.vs || e.vs.some((k) => def.keywords.has(k))));
+  const has = (roll, kind) => fx.some((e) => e.roll === roll && e.kind === kind);
+
   const attacks = count * mean(A);
-  const hitP = kw.torrent ? 1 : rollProb(skill);
+  let hitP = 1;
+  if (!kw.torrent) {
+    const mod = clamp((has("hit", "plus1") ? 1 : 0) - (def.hitPenalty || 0), -1, 1);
+    hitP = rollProb(skill - mod);
+    if (has("hit", "reroll")) hitP = 1 - (1 - hitP) ** 2;
+    else if (has("hit", "ones")) hitP += hitP / 6;
+  }
   const crits = kw.torrent ? 0 : attacks / 6;
   const hits = attacks * hitP + crits * kw.sustained;
   const lethalAuto = kw.lethal ? crits : 0;
@@ -88,8 +105,9 @@ export function weaponDamage(v, count, def) {
 
   let need = woundNeeded(S, def.T), critNeed = 6;
   for (const a of kw.anti) if (def.keywords.has(a.kw)) { need = Math.min(need, a.n); critNeed = Math.min(critNeed, a.n); }
-  let pW = rollProb(need), pCrit = rollProb(critNeed);
-  if (kw.twin) { pW = 1 - (1 - pW) ** 2; pCrit = 1 - (1 - pCrit) ** 2; }
+  let pW = rollProb(has("wound", "plus1") ? need - 1 : need), pCrit = rollProb(critNeed);
+  if (kw.twin || has("wound", "reroll")) { pW = 1 - (1 - pW) ** 2; pCrit = 1 - (1 - pCrit) ** 2; }
+  else if (has("wound", "ones")) { pW += pW / 6; pCrit += pCrit / 6; }
 
   const woundsOk = rolls * pW + lethalAuto;
   const critW = kw.dev ? rolls * Math.min(pCrit, pW) : 0; // devastating: cannot be saved
@@ -98,8 +116,9 @@ export function weaponDamage(v, count, def) {
   const modified = def.save - AP;
   const best = def.invuln ? Math.min(modified, def.invuln) : modified;
   const failP = 1 - saveProb(best);
+  const fnpFail = def.fnp ? 1 - saveProb(def.fnp) : 1; // Feel No Pain also applies to mortal wounds
 
-  return { dmg: (normalW * failP + critW) * meanCapped(D, def.W) };
+  return { dmg: (normalW * failP + critW) * fnpFail * meanCapped(D, def.W, def.dmgReduce || 0) };
 }
 
 // Expected wounds one unit removes from another in one round
@@ -108,7 +127,7 @@ export function unitDamage(att, def, cfg = DEFAULT_CONFIG) {
   for (const w of att.weapons) {
     let best = 0;
     for (const v of w.variants) {
-      const r = weaponDamage(v, w.count, def);
+      const r = weaponDamage(v, w.count, def, { weapon: w.name, offense: att.fx?.offense });
       const weighted = r.dmg * (v.type === "melee" ? cfg.meleeWeight : 1);
       if (weighted > best) best = weighted; // alternative firing modes: take the better one
     }
@@ -132,9 +151,11 @@ export function buildProfiles(report, listIndex = 0) {
     if (groups.length === 0) { skipped.push(`${u.name}: no stat line`); continue; }
     const main = [...groups].sort((a, b) => b.count - a.count)[0].stats;
     const totalWounds = groups.reduce((n, g) => n + g.count * (num(g.stats.W) ?? 1), 0);
+    const fx = extractEffects(u.datasheet?.abilities);
     units.push({
       name: u.name,
       points: u.points,
+      fx, fnp: fx.fnp, dmgReduce: fx.dmgReduce, hitPenalty: fx.hitPenalty,
       listIndex,
       models: groups.reduce((n, g) => n + g.count, 0),
       T: num(main.T), save: num(main.Sv), invuln: num(main.InSv),
@@ -182,6 +203,7 @@ export function sideSummary(mine, theirs, cfg = DEFAULT_CONFIG) {
     const pct = (arr) => theirPoints ? Math.round((arr.reduce((n, x) => n + x.points * x.count, 0) / theirPoints) * 100) : 0;
     return {
       name: m.name, count, points: m.points,
+      habilidades: m.fx.applied, habilidadesSinAplicar: m.fx.notApplied,
       good: buckets.good, regular: buckets.regular, bad: buckets.bad,
       pct: { good: pct(buckets.good), regular: pct(buckets.regular), bad: pct(buckets.bad) },
     };

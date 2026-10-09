@@ -47,7 +47,7 @@ export function matchList(list, dataset) {
 
     if (!data) { report.units.push(entry); continue; }
     unitsMatched++;
-    entry.datasheet = { name: data.name, faction: data.faction, keywords: data.keywords };
+    entry.datasheet = { name: data.name, faction: data.faction, keywords: data.keywords, abilities: data.abilities || [] };
 
     // Models and their stat lines
     if (u.models.length > 0) {
