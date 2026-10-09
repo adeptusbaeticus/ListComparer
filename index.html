@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ListComparer · Comparador de listas de Warhammer 40.000</title>
+<style>
+:root{--bg:#14161a;--card:#1e2128;--line:#2e333d;--txt:#e8e6e1;--mut:#9aa0ab;--ok:#4caf7a;--reg:#7b8494;--bad:#d9534f;--acc:#c9a24b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.5 system-ui,sans-serif}
+header,main,footer{max-width:1000px;margin:0 auto;padding:16px}h1{margin:.2em 0;color:var(--acc)}h2{font-size:1.1rem;margin:0 0 .6em}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+.modos{display:flex;gap:8px;flex-wrap:wrap}.modos button{flex:1;min-width:120px}
+button{background:#2a2f39;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:10px 14px;font:inherit;cursor:pointer}
+button.on,#comparar{background:var(--acc);color:#14161a;border-color:var(--acc);font-weight:600}
+textarea{width:100%;height:200px;background:#101216;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px;font:13px/1.4 ui-monospace,monospace}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}@media(max-width:700px){.grid{grid-template-columns:1fr}}
+.mut,small,.ayuda{color:var(--mut)}.aviso{background:#2b2616;border:1px solid #5b4d1f;border-radius:8px;padding:8px 12px;margin:8px 0}
+.error{background:#2d1a1a;border-color:#6b2b2b}select{background:#101216;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px}
+.dos{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:700px){.dos{grid-template-columns:1fr}}
+.dos h3{margin:.2em 0}.dos ul{margin:.3em 0;padding-left:1.2em}
+details{border-top:1px solid var(--line);padding:8px 0}summary{cursor:pointer}
+.barra{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--line);margin:6px 0 2px}
+.barra i{display:block}.b{background:var(--ok)}.r{background:var(--reg)}.m{background:var(--bad)}
+footer{color:var(--mut);font-size:.85rem}
+</style>
+</head>
+<body>
+<header>
+  <h1>ListComparer</h1>
+  <p class="mut">Compara listas de ejército de Warhammer 40.000 (11.ª edición) y descubre en qué unidades eres fuerte y con cuáles tienes problemas.</p>
+</header>
+<main>
+  <section class="card">
+    <h2>1. Modalidad</h2>
+    <div class="modos" id="modos">
+      <button data-m="1v1" class="on">1 vs 1</button>
+      <button data-m="2v2">2 vs 2</button>
+      <button data-m="team">Equipo vs Equipo</button>
+    </div>
+    <div id="equipo" hidden>
+      <p><label>Jugadores por equipo: <select id="nEquipo"></select></label></p>
+      <p class="aviso">Esta modalidad todavía no está disponible. Por ahora solo se puede comparar 1 vs 1 y 2 vs 2.</p>
+    </div>
+  </section>
+
+  <section class="card" id="listasBox">
+    <h2>2. Pega las listas</h2>
+    <p class="ayuda">Pega el texto tal como lo exporta la app oficial de Warhammer 40.000, en inglés.</p>
+    <div class="grid" id="campos"></div>
+    <button id="comparar">Comparar</button>
+  </section>
+
+  <div id="avisos"></div>
+  <div id="resultado"></div>
+</main>
+<footer id="pie">Herramienta no oficial hecha por aficionados, sin relación con Games Workshop. Datos de BSData.</footer>
+
+<script type="module">
+import { analizar } from "./converter/ui-logic.js";
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+let modo = "1v1", dataset = null;
+
+for (let n = 3; n <= 8; n++) $("nEquipo").add(new Option(`${n} jugadores`, n));
+
+function campos() {
+  const k = modo === "2v2" ? 2 : 1, previos = [...document.querySelectorAll("textarea")].map((t) => t.value);
+  const caja = (id, titulo) => `<div><b>${titulo}</b><textarea id="${id}" spellcheck="false" placeholder="Pega aquí la lista…"></textarea></div>`;
+  let html = "";
+  for (let i = 0; i < k; i++) html += caja(`a${i}`, k > 1 ? `Tu lista ${i + 1}` : "Tu lista");
+  for (let i = 0; i < k; i++) html += caja(`b${i}`, k > 1 ? `Lista rival ${i + 1}` : "Lista rival");
+  $("campos").innerHTML = html;
+  [...document.querySelectorAll("textarea")].forEach((t, i) => { t.value = previos[i] || ""; });
+}
+
+$("modos").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  modo = b.dataset.m;
+  document.querySelectorAll("#modos button").forEach((x) => x.classList.toggle("on", x === b));
+  $("equipo").hidden = modo !== "team";
+  $("listasBox").hidden = modo === "team";
+  $("avisos").innerHTML = $("resultado").innerHTML = "";
+  if (modo !== "team") campos();
+});
+
+const nombre = (x) => `${esc(x.name)}${x.count > 1 ? ` ×${x.count}` : ""}`;
+const lista = (arr) => arr.length ? arr.map(nombre).join(", ") : "—";
+
+function resumen(titulo, intro, ninguna, arr, frase) {
+  const li = arr.map((x) => `<li>${nombre(x)} <small>(${frase(x.pressurePct)})</small></li>`).join("");
+  return `<div><h3>${titulo}</h3><p class="mut">${intro}</p>${arr.length ? `<ul>${li}</ul>` : `<p>${ninguna}</p>`}</div>`;
+}
+
+function unidades(titulo, units) {
+  const filas = units.map((u) => `<details><summary><b>${nombre(u)}</b> <small>${u.points} pts</small>
+    <div class="barra"><i class="b" style="width:${u.pct.good}%"></i><i class="r" style="width:${u.pct.regular}%"></i><i class="m" style="width:${u.pct.bad}%"></i></div>
+    <small>Bueno ${u.pct.good} % · Regular ${u.pct.regular} % · Malo ${u.pct.bad} %</small></summary>
+    <p><b>Buen matchup contra:</b> ${lista(u.good)}</p><p><b>Matchup regular contra:</b> ${lista(u.regular)}</p><p><b>Mal matchup contra:</b> ${lista(u.bad)}</p></details>`).join("");
+  return `<section class="card"><h2>${titulo}</h2><p class="ayuda">Los porcentajes son la parte de los puntos rivales contra la que cada unidad tiene buen, regular o mal matchup. Pulsa una unidad para ver el detalle.</p>${filas}</section>`;
+}
+
+$("comparar").addEventListener("click", () => {
+  const k = modo === "2v2" ? 2 : 1, leer = (p) => Array.from({ length: k }, (_, i) => $(`${p}${i}`).value.trim());
+  const ladoA = leer("a"), ladoB = leer("b");
+  if (!dataset) { $("avisos").innerHTML = `<div class="aviso error">Los datos de unidades todavía no se han cargado. Espera un momento y vuelve a pulsar.</div>`; return; }
+  if ([...ladoA, ...ladoB].some((t) => !t)) { $("avisos").innerHTML = `<div class="aviso">Pega todas las listas antes de comparar.</div>`; $("resultado").innerHTML = ""; return; }
+  try {
+    const { resultado: r, avisos } = analizar({ modo, ladoA, ladoB }, dataset);
+    $("avisos").innerHTML = avisos.map((a) => `<div class="aviso">${esc(a)}</div>`).join("");
+    $("resultado").innerHTML = `<section class="card"><h2>Resumen</h2><div class="dos">
+      ${resumen("Tu lista tiene problemas con…", "Unidades rivales a las que tus 3 mejores unidades no consiguen quitar ni el 75 % en una ronda.", "Ninguna: tus mejores unidades pueden con todo lo que ha puesto el rival.", r.yourSide.struggles, (p) => `tus 3 mejores le quitan un ${p} %`)}
+      ${resumen("El rival tiene problemas con…", "Unidades tuyas a las que sus 3 mejores unidades no consiguen quitar ni el 75 % en una ronda.", "Ninguna: el rival tiene respuesta para todas tus unidades.", r.opponentSide.struggles, (p) => `sus 3 mejores le quitan un ${p} %`)}
+    </div></section>${unidades("Tus unidades", r.yourSide.units)}${unidades("Unidades del rival", r.opponentSide.units)}`;
+  } catch (err) {
+    $("avisos").innerHTML = `<div class="aviso error">No se ha podido comparar las listas: ${esc(err.message)}</div>`;
+  }
+});
+
+campos();
+fetch("./public/data/dataset.json").then((r) => { if (!r.ok) throw 0; return r.json(); }).then((d) => { dataset = d; }).catch(() => {
+  $("avisos").innerHTML = `<div class="aviso error">No se han podido cargar los datos de unidades. Si has abierto este archivo directamente desde tu carpeta, el navegador lo bloquea: abre la web publicada o usa un servidor local.</div>`;
+});
+fetch("./data/source.json").then((r) => r.json()).then((s) => {
+  const f = new Date(s.updated).toLocaleDateString("es-ES");
+  $("pie").innerHTML += ` Datos actualizados el ${f} (versión ${esc(String(s.sha).slice(0, 7))}). Estimación general de una ronda con tiradas medias: no tiene en cuenta habilidades, terreno ni estratagemas.`;
+}).catch(() => {});
+</script>
+</body>
+</html>
