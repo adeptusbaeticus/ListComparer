@@ -12,6 +12,8 @@ on:
   schedule:
     - cron: "17 5 * * *" # every day at 05:17 UTC
   workflow_dispatch: # lets you run it by hand
+  push: # also rebuild when the converter code changes, so the data always matches the code
+    paths: ["converter/**"]
 
 permissions:
   contents: write # to commit the new dataset
@@ -33,7 +35,7 @@ jobs:
           SHA=$(git ls-remote https://github.com/BSData/wh40k-11e.git refs/heads/main | cut -f1)
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           CURRENT=$(node -e "try{console.log(JSON.parse(require('fs').readFileSync('data/source.json','utf8')).sha)}catch{console.log('')}")
-          if [ -n "$SHA" ] && [ "$SHA" != "$CURRENT" ]; then
+          if [ -n "$SHA" ] && { [ "$SHA" != "$CURRENT" ] || [ "$GITHUB_EVENT_NAME" = "push" ]; }; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
