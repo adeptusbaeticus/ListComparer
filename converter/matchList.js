@@ -2,7 +2,7 @@
 // Links a parsed army list (from parseList.js) to datasheets in the dataset (from buildDataset.js).
 // Nothing is guessed: anything that does not match is reported, not invented.
 
-import { norm } from "./buildDataset.js";
+import { norm } from "./norm.js";
 
 const stripTags = (s) => norm(s).replace(/\s*\[[^\]]*\]\s*/g, " ").trim(); // drop "[Legends]" etc.
 

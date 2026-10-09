@@ -7,16 +7,8 @@
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-// Name normaliser shared with the matcher: case, accents, quotes and the "➤" prefix are ignored.
-export const norm = (s) =>
-  String(s ?? "")
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[‘’`´]/g, "'")
-    .replace(/^➤\s*/, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
+import { norm } from "./norm.js";
+export { norm };
 
 const SKIP_LINK_NAMES = new Set(["weapon modifications", "crusade"]);
 const WEAPON_TYPES = { "Ranged Weapons": "ranged", "Melee Weapons": "melee" };
