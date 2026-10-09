@@ -3,8 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node test.js",
+    "test": "node test.js && node test-compare.js",
     "build-data": "node buildDataset.js ./data ./dataset.json",
-    "report": "node report.js"
+    "report": "node report.js",
+    "demo": "node demo-compare.js"
   }
 }
