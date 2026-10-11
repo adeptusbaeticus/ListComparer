@@ -9,6 +9,8 @@ const POINTS_RE = /\(\s*([\d.,]+)\s*(?:Points?|pts)\s*\)\s*$/i;
 const DET_POINTS_RE = /\(\s*([\d.,]+)\s*Detachment Points?\s*\)\s*$/i;
 const SECTION_RE = /^[A-Z][A-Z0-9 &'\-]*$/; // CHARACTERS, BATTLELINE, ...
 const COUNT_RE = /^(\d+)\s*x\s+(.+)$/i;
+const TRAILER_RE = /^(exported|created|generated)\s+(with|by)\b/i;
+const ATTACHED_GROUP_RE = /^attached unit\s*(\d+)$/i;
 const BULLET_RE = /^(\s*)([•◦▪‣\-*])\s*(.*)$/;
 
 const num = (s) => parseInt(String(s).replace(/[.,]/g, ""), 10);
@@ -26,7 +28,8 @@ export function parseList(text) {
     .replace(/\u00a0/g, " ")
     .replace(/\t/g, "    ")
     .split("\n")
-    .map((l) => l.replace(/\s+$/, ""));
+    .map((l) => l.replace(/\s+$/, ""))
+    .filter((l) => !TRAILER_RE.test(l.trim())); // e.g. "Exported with New Recruit v36.43, Data Version: v11"
 
   const list = {
     name: "",
@@ -79,6 +82,7 @@ export function parseList(text) {
 
   // --- sections and units
   let section = "";
+  let attachedGroup = null; // number of the "Attached unit N" block we are in
   let unit = null;
   let group = null; // current level-1 item that may turn out to be a model group
 
@@ -114,6 +118,8 @@ export function parseList(text) {
       if (level === 1) {
         closeGroup();
         if (/^warlord$/i.test(body)) { unit.warlord = true; continue; }
+        const att = body.match(/^attached as\s*:\s*(.+)$/i);
+        if (att) { unit.attachedAs = att[1].trim(); continue; } // "Leader (Character)" or "Bodyguard"
         const enh = body.match(/^enhancements?\s*:\s*(.+)$/i);
         if (enh) { unit.enhancements.push(enh[1].trim()); continue; }
         const c = body.match(COUNT_RE);
@@ -131,8 +137,12 @@ export function parseList(text) {
     if (SECTION_RE.test(line)) {
       closeGroup(); closeUnit();
       section = line;
+      attachedGroup = null;
       continue;
     }
+
+    const ag = line.match(ATTACHED_GROUP_RE);
+    if (ag) { closeGroup(); closeUnit(); attachedGroup = +ag[1]; continue; }
 
     const p = line.match(POINTS_RE);
     if (p) {
@@ -146,6 +156,8 @@ export function parseList(text) {
         models: [],   // model groups: [{ count, name, wargear: [{count,name}] }]
         wargear: [],  // wargear on single-model units (vehicles, characters)
         extras: [],
+        attachedGroup, // leader + bodyguard units share the same number
+        attachedAs: null,
         modelCount: 0,
       };
       continue;

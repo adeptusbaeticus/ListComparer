@@ -43,7 +43,7 @@ export function matchList(list, dataset) {
 
   for (const u of list.units) {
     const data = pickUnit(lookup.get(norm(u.name)) || lookup.get(stripTags(u.name)), list.faction);
-    const entry = { name: u.name, points: u.points, section: u.section, matched: !!data, models: [], weapons: [], notWeapons: [] };
+    const entry = { name: u.name, points: u.points, section: u.section, attachedGroup: u.attachedGroup, attachedAs: u.attachedAs, matched: !!data, models: [], weapons: [], notWeapons: [] };
 
     if (!data) { report.units.push(entry); continue; }
     unitsMatched++;
