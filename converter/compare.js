@@ -50,7 +50,9 @@ export function parseDice(expr) {
   return [...dist].map(([v, p]) => ({ v: v + c, p }));
 }
 const mean = (d) => d.reduce((a, o) => a + o.v * o.p, 0);
-const meanCapped = (d, cap, reduce = 0) => d.reduce((a, o) => a + Math.min(Math.max(o.v - reduce, 1), cap) * o.p, 0); // damage never drops below 1
+// halve first (rounding up), then subtract, never below 1, never more than the model has wounds
+const meanCapped = (d, cap, reduce = 0, halve = false) =>
+  d.reduce((a, o) => a + Math.min(Math.max((halve ? Math.ceil(o.v / 2) : o.v) - reduce, 1), cap) * o.p, 0);
 
 function parseKeywords(str) {
   const k = { torrent: false, twin: false, lethal: false, dev: false, oneShot: false, sustained: 0, anti: [] };
@@ -118,11 +120,13 @@ export function weaponDamage(v, count, def, mods = {}) {
   const failP = 1 - saveProb(best);
   const fnpFail = def.fnp ? 1 - saveProb(def.fnp) : 1; // Feel No Pain also applies to mortal wounds
 
-  return { dmg: (normalW * failP + critW) * fnpFail * meanCapped(D, def.W, def.dmgReduce || 0) };
+  return { dmg: (normalW * failP + critW) * fnpFail * meanCapped(D, def.W, def.dmgReduce || 0, !!def.halve) };
 }
 
 // Expected wounds one unit removes from another in one round
 export function unitDamage(att, def, cfg = DEFAULT_CONFIG) {
+  // A leader + bodyguard unit has one defence profile per kind of model; attacks are spread over them by wounds.
+  if (def.segments) return def.segments.reduce((n, s) => n + s.share * unitDamage(att, s.def, cfg), 0);
   let total = 0;
   for (const w of att.weapons) {
     let best = 0;
@@ -155,7 +159,8 @@ export function buildProfiles(report, listIndex = 0) {
     units.push({
       name: u.name,
       points: u.points,
-      fx, fnp: fx.fnp, dmgReduce: fx.dmgReduce, hitPenalty: fx.hitPenalty,
+      fx, fnp: fx.fnp, dmgReduce: fx.dmgReduce, halve: fx.halve, hitPenalty: fx.hitPenalty,
+      attachedGroup: u.attachedGroup ?? null, attachedAs: u.attachedAs ?? null,
       listIndex,
       models: groups.reduce((n, g) => n + g.count, 0),
       T: num(main.T), save: num(main.Sv), invuln: num(main.InSv),
@@ -165,7 +170,55 @@ export function buildProfiles(report, listIndex = 0) {
       weapons: u.weapons.map((w) => ({ name: w.name, count: w.count, variants: w.variants })),
     });
   }
-  return { units, skipped };
+  return { units: mergeAttached(units), skipped };
+}
+
+// A Leader attached to a Bodyguard unit fights as ONE unit: the points, models, wounds and weapons of both
+// are added together, and the stats and abilities come from the bodyguard (the most numerous models).
+// The leader's own abilities are not applied yet (most are conditional on leading a unit).
+function mergeAttached(units) {
+  const groups = new Map();
+  for (const u of units) if (u.attachedGroup != null) groups.set(u.attachedGroup, [...(groups.get(u.attachedGroup) || []), u]);
+  const out = [], done = new Set();
+  for (const u of units) {
+    const members = u.attachedGroup != null ? groups.get(u.attachedGroup) : null;
+    if (!members || members.length < 2) { out.push(u); continue; }
+    if (done.has(u.attachedGroup)) continue;
+    done.add(u.attachedGroup);
+    const guard = members.find((m) => /bodyguard/i.test(m.attachedAs || "")) || [...members].sort((a, b) => b.models - a.models)[0];
+    const leaders = members.filter((m) => m !== guard);
+    const all = [...leaders, guard];
+    const totalWounds = all.reduce((n, m) => n + m.totalWounds, 0);
+    const defOf = (m, fx) => ({ T: m.T, save: m.save, invuln: m.invuln, W: m.W, keywords: m.keywords, fnp: fx.fnp, dmgReduce: fx.dmgReduce, halve: fx.halve, hitPenalty: fx.hitPenalty });
+    // the leader is protected by its own "this model" abilities plus the bodyguard's "this unit" abilities
+    const withUnitwide = (own) => {
+      const u = guard.fx.scoped.unit;
+      return { fnp: [own.fnp, u.fnp].filter(Boolean).reduce((x, y) => Math.min(x, y), 99) % 99 || null, dmgReduce: Math.max(own.dmgReduce, u.dmgReduce), halve: own.halve || u.halve, hitPenalty: Math.max(own.hitPenalty, u.hitPenalty) };
+    };
+    const segments = [
+      ...leaders.map((l) => ({ share: l.totalWounds / totalWounds, def: defOf(l, withUnitwide(l.fx.scoped.model)) })),
+      { share: guard.totalWounds / totalWounds, def: defOf(guard, guard.fx) },
+    ];
+    const note = (x) => (x.scope === "model" ? { ...x, efecto: `${x.efecto} (solo afecta al líder)` } : x);
+    out.push({
+      ...guard,
+      name: all.map((m) => m.name).join(" + "),
+      points: all.reduce((n, m) => n + m.points, 0),
+      models: all.reduce((n, m) => n + m.models, 0),
+      totalWounds,
+      keywords: new Set(all.flatMap((m) => [...m.keywords])),
+      weapons: all.flatMap((m) => m.weapons),
+      segments,
+      fx: {
+        ...guard.fx,
+        applied: [...leaders.flatMap((l) => l.fx.applied.map(note)), ...guard.fx.applied],
+        ignored: all.flatMap((m) => m.fx.ignored),
+        notApplied: all.reduce((n, m) => n + m.fx.notApplied, 0),
+      },
+      attachedLeaders: leaders.map((l) => l.name),
+    });
+  }
+  return out;
 }
 
 // ---------- side against side ----------
@@ -203,7 +256,7 @@ export function sideSummary(mine, theirs, cfg = DEFAULT_CONFIG) {
     const pct = (arr) => theirPoints ? Math.round((arr.reduce((n, x) => n + x.points * x.count, 0) / theirPoints) * 100) : 0;
     return {
       name: m.name, count, points: m.points,
-      habilidades: m.fx.applied, habilidadesSinAplicar: m.fx.notApplied,
+      habilidades: m.fx.applied, habilidadesSinAplicar: m.fx.notApplied, habilidadesIgnoradas: (m.fx.ignored || []).map((x) => x.name), lideres: m.attachedLeaders || [],
       good: buckets.good, regular: buckets.regular, bad: buckets.bad,
       pct: { good: pct(buckets.good), regular: pct(buckets.regular), bad: pct(buckets.bad) },
     };

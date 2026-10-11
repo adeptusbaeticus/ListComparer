@@ -26,4 +26,12 @@ for (const t of ["Exported with New Recruit v99.1, Data Version: v12", "Exported
 }
 // a list without the trailer is just as fine
 assert.deepEqual(parseList(txt.replace(/Exported with.*$/m, "")).warnings, []);
+// second real list (Dark Angels, with a different trailer version)
+{
+  const r = parseList(readFileSync("./samples/dark-angels-1000.txt", "utf8"));
+  assert.deepEqual(r.warnings, []);
+  assert.equal(r.list.units.length, 8);
+  assert.equal(r.list.unitPointsSum, 1000);
+  assert.deepEqual(r.list.units.slice(0, 4).map((u) => [u.attachedGroup, /^Leader/.test(u.attachedAs) ? "L" : "B"]), [[1, "L"], [1, "B"], [2, "L"], [2, "B"]]);
+}
 console.log("Parser checks (trailer + attached units) passed.");

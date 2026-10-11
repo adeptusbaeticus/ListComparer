@@ -16,6 +16,16 @@ assert.equal(tk.weapon, "vanquisher battle cannon"); assert.equal(tk.type, "rang
 assert.equal(one("Tank Hunter", "Each time this model makes a ranged attack that targets a Vehicle unit, add 1 to the Wound roll").offense[0].kind, "plus1");
 assert.equal(one("Storm Troopers", "Each time a model in this unit makes an attack, re-roll a Wound roll of 1. If the target of that attack is an enemy unit within range of an objective marker, you can re-roll the Wound roll instead.").offense[0].kind, "ones");
 
+
+// halve damage, and who it protects
+const rty = one("Refuse to Yield", "Each time an attack is allocated to this model, halve the Damage characteristic of that attack.");
+assert.equal(rty.halve, true);
+assert.equal(rty.scoped.model.halve, true);
+assert.equal(rty.scoped.unit.halve, false);          // it protects the leader only, not the unit it leads
+assert.equal(one("Hulking", "Each time an attack is allocated to a model in this unit, halve the Damage characteristic of that attack.").scoped.unit.halve, true);
+assert.equal(one("Rites of Battle", "Once per battle round, one unit from your army with this ability can use it when it is targeted with a Stratagem.").notApplied, 1);
+assert.equal(one("Rites of Battle", "Once per battle round, one unit from your army with this ability can use it when it is targeted with a Stratagem.").ignored[0].name, "Rites of Battle");
+
 // conditional, leader, aura or situational abilities must NOT be applied
 for (const [n, t] of [
   ["Ogryn Bodyguard", "While one or more Officer models are in the same unit as this model, those Officer models have the Feel No Pain 4+ ability"],
