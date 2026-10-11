@@ -7,7 +7,11 @@
 <style>
 :root{--bg:#14161a;--card:#1e2128;--line:#2e333d;--txt:#e8e6e1;--mut:#9aa0ab;--ok:#4caf7a;--reg:#7b8494;--bad:#d9534f;--acc:#c9a24b}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.5 system-ui,sans-serif}
-header,main,footer{max-width:1000px;margin:0 auto;padding:16px}h1{margin:.2em 0;color:var(--acc)}h2{font-size:1.1rem;margin:0 0 .6em}
+header,main,.tip{border-bottom:1px dotted var(--mut);cursor:help}.tip:focus{outline:1px solid var(--acc);outline-offset:2px}
+#bocadillo{position:fixed;z-index:10;max-width:min(380px,calc(100vw - 16px));max-height:85vh;overflow:hidden;background:#0e1013;border:1px solid var(--acc);border-radius:8px;padding:10px 12px;font-size:.85rem;box-shadow:0 6px 20px #0009;pointer-events:none}
+#bocadillo h4{margin:.7em 0 .2em;color:var(--acc);font-size:.85rem}#bocadillo p{margin:.2em 0}#bocadillo ul{margin:.2em 0;padding-left:1.1em}
+.etq{margin:.3em 0;font-weight:600}.etq.good{color:var(--ok)}.etq.bad{color:var(--bad)}.etq.regular{color:var(--mut)}
+footer{max-width:1000px;margin:0 auto;padding:16px}h1{margin:.2em 0;color:var(--acc)}h2{font-size:1.1rem;margin:0 0 .6em}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
 .modos{display:flex;gap:8px;flex-wrap:wrap}.modos button{flex:1;min-width:120px}
 button{background:#2a2f39;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:10px 14px;font:inherit;cursor:pointer}
@@ -55,11 +59,13 @@ footer{color:var(--mut);font-size:.85rem}
 </main>
 <footer id="pie">Herramienta no oficial hecha por aficionados, sin relación con Games Workshop. Datos de BSData.</footer>
 
+<div id="bocadillo" role="tooltip" hidden></div>
+
 <script type="module">
 import { analizar } from "./converter/ui-logic.js";
+import { esc, htmlPar, htmlPresion } from "./converter/explain-html.js";
 
 const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 let modo = "1v1", dataset = null;
 
 for (let n = 3; n <= 8; n++) $("nEquipo").add(new Option(`${n} jugadores`, n));
@@ -85,10 +91,19 @@ $("modos").addEventListener("click", (e) => {
 });
 
 const nombre = (x) => `${esc(x.name)}${x.count > 1 ? ` ×${x.count}` : ""}`;
-const lista = (arr) => arr.length ? arr.map(nombre).join(", ") : "—";
+const detalles = []; // one explanation per name that can be hovered
+function tip(x, conPuntos) {
+  detalles.push(x.detalle);
+  return `<span class="tip" tabindex="0" data-d="${detalles.length - 1}">${nombre(x)}${conPuntos ? ` <small>(${x.points} pts)</small>` : ""}</span>`;
+}
+function lista(arr) {
+  if (!arr.length) return "—";
+  const veces = {}; arr.forEach((x) => { veces[x.name] = (veces[x.name] || 0) + 1; }); // same name twice: show the points to tell them apart
+  return arr.map((x) => (x.detalle ? tip(x, veces[x.name] > 1) : nombre(x))).join(", ");
+}
 
 function resumen(titulo, intro, ninguna, arr, frase) {
-  const li = arr.map((x) => `<li>${nombre(x)} <small>(${frase(x.pressurePct)})</small></li>`).join("");
+  const li = arr.map((x) => `<li>${x.detalle ? tip(x, false) : nombre(x)} <small>(${frase(x.pressurePct)})</small></li>`).join("");
   return `<div><h3>${titulo}</h3><p class="mut">${intro}</p>${arr.length ? `<ul>${li}</ul>` : `<p>${ninguna}</p>`}</div>`;
 }
 
@@ -106,7 +121,7 @@ function unidades(titulo, units) {
     <div class="barra"><i class="b" style="width:${u.pct.good}%"></i><i class="r" style="width:${u.pct.regular}%"></i><i class="m" style="width:${u.pct.bad}%"></i></div>
     <small>Bueno ${u.pct.good} % · Regular ${u.pct.regular} % · Malo ${u.pct.bad} %</small></summary>
     <p><b>Buen matchup contra:</b> ${lista(u.good)}</p><p><b>Matchup regular contra:</b> ${lista(u.regular)}</p><p><b>Mal matchup contra:</b> ${lista(u.bad)}</p>${habilidades(u)}</details>`).join("");
-  return `<section class="card"><h2>${titulo}</h2><p class="ayuda">Los porcentajes son la parte de los puntos rivales contra la que cada unidad tiene buen, regular o mal matchup. Pulsa una unidad para ver el detalle.</p>${filas}</section>`;
+  return `<section class="card"><h2>${titulo}</h2><p class="ayuda">Los porcentajes son la parte de los puntos rivales contra la que cada unidad tiene buen, regular o mal matchup. Pulsa una unidad para ver el detalle y pasa el ratón por encima de un nombre para ver el porqué.</p>${filas}</section>`;
 }
 
 $("comparar").addEventListener("click", () => {
@@ -115,6 +130,7 @@ $("comparar").addEventListener("click", () => {
   if (!dataset) { $("avisos").innerHTML = `<div class="aviso error">Los datos de unidades todavía no se han cargado. Espera un momento y vuelve a pulsar.</div>`; return; }
   if ([...ladoA, ...ladoB].some((t) => !t)) { $("avisos").innerHTML = `<div class="aviso">Pega todas las listas antes de comparar.</div>`; $("resultado").innerHTML = ""; return; }
   try {
+    detalles.length = 0;
     const { resultado: r, avisos } = analizar({ modo, ladoA, ladoB }, dataset);
     $("avisos").innerHTML = avisos.map((a) => `<div class="aviso">${esc(a)}</div>`).join("");
     $("resultado").innerHTML = `<section class="card"><h2>Resumen</h2><div class="dos">
@@ -125,6 +141,19 @@ $("comparar").addEventListener("click", () => {
     $("avisos").innerHTML = `<div class="aviso error">No se ha podido comparar las listas: ${esc(err.message)}</div>`;
   }
 });
+
+const bocadillo = $("bocadillo"), ocultar = () => { bocadillo.hidden = true; };
+function mostrar(el) {
+  const d = detalles[el.dataset.d]; if (!d) return;
+  bocadillo.innerHTML = d.tipo === "presion" ? htmlPresion(d) : htmlPar(d);
+  bocadillo.hidden = false;
+  const r = el.getBoundingClientRect(), w = bocadillo.offsetWidth, hh = bocadillo.offsetHeight;
+  bocadillo.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + "px";
+  bocadillo.style.top = (r.bottom + 6 + hh > innerHeight - 8 ? Math.max(8, r.top - hh - 6) : r.bottom + 6) + "px";
+}
+for (const ev of ["mouseover", "focusin"]) document.addEventListener(ev, (e) => { const t = e.target.closest?.(".tip"); if (t) mostrar(t); else ocultar(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") ocultar(); });
+window.addEventListener("scroll", ocultar, { passive: true });
 
 campos();
 fetch("./public/data/dataset.json").then((r) => { if (!r.ok) throw 0; return r.json(); }).then((d) => { dataset = d; }).catch(() => {
