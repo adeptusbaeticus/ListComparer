@@ -93,9 +93,10 @@ export function weaponDamage(v, count, def, mods = {}) {
   const has = (roll, kind) => fx.some((e) => e.roll === roll && e.kind === kind);
 
   const attacks = count * mean(A);
-  let hitP = 1;
+  let hitP = 1, hitNeed = null;
   if (!kw.torrent) {
     const mod = clamp((has("hit", "plus1") ? 1 : 0) - (def.hitPenalty || 0), -1, 1);
+    hitNeed = clamp(skill - mod, 2, 6);
     hitP = rollProb(skill - mod);
     if (has("hit", "reroll")) hitP = 1 - (1 - hitP) ** 2;
     else if (has("hit", "ones")) hitP += hitP / 6;
@@ -120,25 +121,44 @@ export function weaponDamage(v, count, def, mods = {}) {
   const failP = 1 - saveProb(best);
   const fnpFail = def.fnp ? 1 - saveProb(def.fnp) : 1; // Feel No Pain also applies to mortal wounds
 
-  return { dmg: (normalW * failP + critW) * fnpFail * meanCapped(D, def.W, def.dmgReduce || 0, !!def.halve) };
+  return {
+    dmg: (normalW * failP + critW) * fnpFail * meanCapped(D, def.W, def.dmgReduce || 0, !!def.halve),
+    info: { hit: hitNeed, wound: clamp(has("wound", "plus1") ? need - 1 : need, 2, 6), save: best >= 7 ? null : Math.max(best, 2), fnp: def.fnp || null },
+  };
 }
 
-// Expected wounds one unit removes from another in one round
-export function unitDamage(att, def, cfg = DEFAULT_CONFIG) {
-  // A leader + bodyguard unit has one defence profile per kind of model; attacks are spread over them by wounds.
-  if (def.segments) return def.segments.reduce((n, s) => n + s.share * unitDamage(att, s.def, cfg), 0);
+// Expected wounds one unit removes from another in one round, with a per-weapon breakdown
+export function damageBreakdown(att, def, cfg = DEFAULT_CONFIG) {
+  if (def.segments) { // leader + bodyguard: one defence profile per kind of model, blended by wounds
+    const byName = new Map();
+    let total = 0;
+    for (const s of def.segments) {
+      const b = damageBreakdown(att, s.def, cfg);
+      total += s.share * b.total;
+      for (const w of b.weapons) {
+        const cur = byName.get(w.name) || { ...w, dmg: 0, share: -1 };
+        cur.dmg += s.share * w.dmg;
+        if (s.share > cur.share) { cur.info = w.info; cur.share = s.share; }
+        byName.set(w.name, cur);
+      }
+    }
+    return { total, weapons: [...byName.values()].map(({ share, ...w }) => w) };
+  }
+  const weapons = [];
   let total = 0;
   for (const w of att.weapons) {
-    let best = 0;
+    let top = { dmg: 0 };
     for (const v of w.variants) {
       const r = weaponDamage(v, w.count, def, { weapon: w.name, offense: att.fx?.offense });
       const weighted = r.dmg * (v.type === "melee" ? cfg.meleeWeight : 1);
-      if (weighted > best) best = weighted; // alternative firing modes: take the better one
+      if (weighted > top.dmg) top = { dmg: weighted, info: r.info, tipo: v.type, modo: v.mode }; // alternative modes: the better one
     }
-    total += best;
+    total += top.dmg;
+    weapons.push({ name: w.name, count: w.count, ...top });
   }
-  return total;
+  return { total, weapons };
 }
+export const unitDamage = (att, def, cfg = DEFAULT_CONFIG) => damageBreakdown(att, def, cfg).total;
 
 // fraction (0-1) of the defender's wounds removed in one round
 export const fractionKilled = (att, def, cfg) => Math.min(1, unitDamage(att, def, cfg) / def.totalWounds);
@@ -246,12 +266,39 @@ export function sideSummary(mine, theirs, cfg = DEFAULT_CONFIG) {
   const myGroups = groupUnits(mine), theirGroups = groupUnits(theirs);
   const theirPoints = theirGroups.reduce((n, g) => n + g.unit.points * g.count, 0);
 
+  const round = (x, d = 1) => Math.round(x * 10 ** d) / 10 ** d;
+  const stats = (u) => ({ T: u.T, save: u.save, invuln: u.invuln, W: u.W, models: u.models, totalWounds: u.totalWounds, points: u.points, lideres: u.attachedLeaders || [] });
+  const pack = (b, def) => { // what one unit does to another: totals plus its 3 main weapons
+    const merged = new Map();
+    for (const w of b.weapons) {
+      if (!(w.dmg > 0)) continue;
+      const cur = merged.get(w.name);
+      if (cur) { cur.count += w.count || 0; cur.dmg += w.dmg; } else merged.set(w.name, { ...w });
+    }
+    const f = Math.min(1, b.total / def.totalWounds);
+    return {
+      heridas: round(Math.min(b.total, def.totalWounds)), de: def.totalWounds, pct: Math.round(f * 100), puntos: Math.round(f * def.points),
+      armas: [...merged.values()].sort((x, y) => y.dmg - x.dmg).slice(0, 3)
+        .map((w) => ({ name: w.name, count: w.count, dmg: round(w.dmg, 2), pct: b.total ? Math.round((w.dmg / b.total) * 100) : 0, tipo: w.tipo, info: w.info || null })),
+    };
+  };
+
   const units = myGroups.map(({ unit: m, count }) => {
     const buckets = { good: [], regular: [], bad: [] };
     for (const { unit: t, count: tc } of theirGroups) {
-      const fMine = fractionKilled(m, t, cfg), fTheirs = fractionKilled(t, m, cfg);
+      const bMine = damageBreakdown(m, t, cfg), bTheirs = damageBreakdown(t, m, cfg);
+      const fMine = Math.min(1, bMine.total / t.totalWounds), fTheirs = Math.min(1, bTheirs.total / m.totalWounds);
       const { label, score } = labelFor(fMine, fTheirs, m, t, cfg);
-      buckets[label].push({ name: t.name, count: tc, points: t.points, score: Math.round(score * 100) / 100 });
+      buckets[label].push({
+        name: t.name, count: tc, points: t.points, score: round(score, 2),
+        detalle: {
+          tipo: "par", etiqueta: label, ventaja: Math.round(score * 100),
+          despreciable: fMine < cfg.negligible && fTheirs < cfg.negligible,
+          yo: { nombre: m.name, ...stats(m), habilidades: m.fx.applied },
+          ellos: { nombre: t.name, ...stats(t), habilidades: t.fx.applied },
+          ataque: pack(bMine, t), defensa: pack(bTheirs, m), meleeWeight: cfg.meleeWeight,
+        },
+      });
     }
     const pct = (arr) => theirPoints ? Math.round((arr.reduce((n, x) => n + x.points * x.count, 0) / theirPoints) * 100) : 0;
     return {
@@ -266,9 +313,12 @@ export function sideSummary(mine, theirs, cfg = DEFAULT_CONFIG) {
   // Using the best 3 (not the whole list) keeps it realistic: a big list can always kill anything
   // if every unit shoots at it, so that would never flag a problem.
   const pressure = theirGroups.map(({ unit: t, count }) => {
-    const best = mine.map((m) => fractionKilled(m, t, cfg)).sort((a, b) => b - a).slice(0, cfg.topAnswers);
-    const p = Math.min(1, best.reduce((n, x) => n + x, 0));
-    return { name: t.name, count, points: t.points, pressurePct: Math.round(p * 100) };
+    const per = mine.map((m) => ({ name: m.name, f: fractionKilled(m, t, cfg) })).sort((a, b) => b.f - a.f).slice(0, cfg.topAnswers);
+    const p = Math.min(1, per.reduce((n, x) => n + x.f, 0));
+    return {
+      name: t.name, count, points: t.points, pressurePct: Math.round(p * 100),
+      detalle: { tipo: "presion", objetivo: t.name, mejores: per.map((x) => ({ name: x.name, pct: Math.round(x.f * 100) })), total: Math.round(p * 100) },
+    };
   });
   const struggles = pressure.filter((x) => x.pressurePct < cfg.pressureThreshold * 100)
     .sort((a, b) => a.pressurePct - b.pressurePct);
