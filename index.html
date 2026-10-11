@@ -94,9 +94,9 @@ function resumen(titulo, intro, ninguna, arr, frase) {
 
 function habilidades(u) {
   // tolerant on purpose: if the page and the engine files are from different versions, it still works
-  const aplicadas = u.habilidades || [], lideres = u.lideres || [], sin = u.habilidadesSinAplicar || 0;
+  const aplicadas = u.habilidades || [], lideres = u.lideres || [], sin = u.habilidadesSinAplicar || 0, nombres = u.habilidadesIgnoradas || [];
   const hechas = aplicadas.map((x) => `${esc(x.name)} <small>(${esc(x.efecto)})</small>`).join(", ") || "ninguna";
-  const resto = sin ? ` <small>· ${sin} habilidad${sin > 1 ? "es" : ""} más no se tiene${sin > 1 ? "n" : ""} en cuenta</small>` : "";
+  const resto = sin ? ` <small>· ${sin} más no se tiene${sin > 1 ? "n" : ""} en cuenta${nombres.length ? `: ${nombres.map(esc).join(", ")}` : ""}</small>` : "";
   const lider = lideres.length ? `<p><small>Unidad con líder (${lideres.map(esc).join(", ")}): se calcula como una sola unidad, con las armas, heridas y puntos de ambos. Las habilidades del líder todavía no se aplican.</small></p>` : "";
   return `${lider}<p><b>Habilidades tenidas en cuenta:</b> ${hechas}${resto}</p>`;
 }
